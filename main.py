@@ -14,6 +14,7 @@ TOKEN = os.getenv('TOKEN')
 SONG_QUEUES = {}
 GUILD_ID = 1168043245863960676
 DJ_ROLE_IDS = {}
+VOTE_SKIPS = {}
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -277,5 +278,41 @@ async def playlist(interaction: discord.Interaction, playlist_url: str):
 
     except Exception as e:
         await interaction.followup.send(f"An error occurred: {e}")
+
+
+@bot.tree.command(name="voteskip", description="Vote to skip the current song.")
+async def voteskip(interaction: discord.Interaction):
+    voice_client = interaction.guild.voice_client
+    if not voice_client or not voice_client.is_playing():
+        await interaction.response.send_message("Nothing is playing right now.")
+        return
+
+    guild_id = interaction.guild.id
+    user_id = interaction.user.id
+    voice_channel = interaction.user.voice.channel
+
+    if not voice_channel:
+        await interaction.response.send_message("You must be in a voice channel to vote.")
+        return
+
+    if guild_id not in VOTE_SKIPS:
+        VOTE_SKIPS[guild_id] = {"votes": set(), "channel": voice_channel}
+
+    if VOTE_SKIPS[guild_id]["channel"] != voice_channel:
+        await interaction.response.send_message("You must be in the same voice channel as the bot to vote.")
+        return
+
+    VOTE_SKIPS[guild_id]["votes"].add(user_id)
+    total_users = len(voice_channel.members) - 1  # Subtract the bot itself
+    required_votes = total_users // 2 + 1  # Majority vote
+
+    current_votes = len(VOTE_SKIPS[guild_id]["votes"])
+
+    await interaction.response.send_message(f"Vote added. {current_votes}/{required_votes} votes to skip.")
+
+    if current_votes >= required_votes:
+        voice_client.stop()
+        await interaction.channel.send("Vote skip successful.")
+        del VOTE_SKIPS[guild_id]  # Reset vote data
 
 bot.run(TOKEN)
